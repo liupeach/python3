@@ -1,0 +1,144 @@
+show dot11 associations all-client    查看连接ap的设备信息
+
+
+
+1、连接好网络拓扑，保证AP 能被供电，能正常开机。
+2、保证要接AP的网线接在电脑上，电脑可以使用网络，使用ping测试。
+3、完成AP基本配置后验证无线SSID 能否被无线用户端正常搜索发现到。
+4、配置无线用户端的IP 地址为静态IP，并验证网络连通性。
+5、AP其他可选配置（DHCP 服务、无线的认证及加密方式）
+步骤1 配置无线用户 Vlan和DHCP服务器（给连接的PC分配地址，如网络中已经存在DHCP服务器可跳过此配置）
+Ruijie>enable
+Ruijie#configure terminal   
+Ruijie(config)#vlan 1 ------>创建无线用户vlan
+Ruijie(config-vlan)#exit
+Ruijie(config)#service dhcp   ------>开启DHCP服务
+Ruijie(config)#ip dhcp excluded-address 172.16.1.253 172.16.1.254 ------>不下发地址范围
+Ruijie(config)#ip dhcp pool test ------>配置DHCP地址池，名称是 “test”
+Ruijie(dhcp-config)#network 172.16.1.0 255.255.255.0 ------>下发172.16.1.0地址段给无线用户
+Ruijie(dhcp-config)#dns-server 218.85.157.99  ------>下发DNS地址
+Ruijie(dhcp-config)#default-router 172.16.1.254 ------>下发网关
+Ruijie(dhcp-config)#exit
+注意：如果DHCP服务器在上联设备做，请在全局配置无线广播转发功能，否则会出现DHCP获取不稳定现象
+Ruijie(config)#data-plane wireless-broadcast enable
+
+
+
+
+
+
+
+步骤2 配置AP的以太网接口,让无线用户的数据可以正常传输
+Ruijie(config)#interface GigabitEthernet 0/1
+Ruijie(config-if)#encapsulation dot1Q 1  ------>接口封装vlan 1
+注意：要封装相应的vlan，否则无法通信
+Ruijie(config-if)#exit
+
+步骤3 配置wlan，并广播SSID
+Ruijie(config)#dot11 wlan 1
+Ruijie(dot11-wlan-config)#vlan 1  ------>关联vlan1
+Ruijie(dot11-wlan-config)#broadcast-ssid  ------>广播SSID
+Ruijie(dot11-wlan-config)#ssid AP  ------>SSID名称为AP
+Ruijie(dot11-wlan-config)#exit
+
+步骤4 创建射频子接口，封装无线用户vlan
+Ruijie(config)#interface Dot11radio 1/0.1------>在射频卡的子接口封装vlan
+Ruijie(config-if-Dot11radio 1/0.1)#encapsulation dot1Q 1
+Ruijie(config-if-Dot11radio 1/0.1)#mac-mode fat
+Ruijie(config-if-Dot11radio 1/0.1)#exit
+注意：mac-mode 模式必须为fat，否则会出现能搜索到信号，连接不上无线网络现象
+
+
+
+
+
+步骤5 在射频口上调用wlan-id，使能发出无线信号
+Ruijie(config)#interface Dot11radio 1/0
+Ruijie(config-if-Dot11radio 1/0)#channel 1 ------>信道为channel 1,802.11b中互不干扰信道为1、6、11
+Ruijie(config-if-Dot11radio 1/0)#power local 100 ------>功率改为100%(默认)
+Ruijie(config-if-Dot11radio 1/0)#wlan-id 1 ------>关联wlan 1
+Ruijie(config-if-Dot11radio 1/0)#exit 
+
+步骤6 配置interface vlan地址和静态路由。
+Ruijie(config)#interface BVI 1 ------>配置管理地址接口，vlan 1对应bvi 1
+Ruijie(config-if-BVI 1)#ip address 172.16.1.253 255.255.255.0 ------>该地址只能用于管理，不能作为无线用户网关地址，网关设置在上联设备
+Ruijie(config-if-BVI 1)#exit
+Ruijie(config)#ip route 0.0.0.0 0.0.0.0 172.16.1.254
+Ruijie(config)#end
+Ruijie#write   ------>确认配置正确，保存配置
+
+
+
+
+
+
+
+
+
+
+⑵配置要点
+1、确认AC无线交换机和AP是同一个软件版本，使用Ruijie>show verison 查看
+2、确认AP是工作在廋模式下，使用Ruijie>show ap-mode 验证，显示fit是廋模式。
+如果显示fat模式那么需要以下命令进行更改：
+Ruijie>enable            ------>进入特权模式
+Ruijie#configure terminal     ------>进入全局配置模式
+Ruijie(config)#ap-mode fit   ------>修改成廋模式
+Ruijie(config)#end   ------>退出到特权模式
+Ruijie#write------>确认配置正确，保存配置    
+
+
+
+
+
+
+1、VlAN配置，创建用户vlan，ap vlan和互联vlan
+Ruijie>enable       ------>进入特权模式
+Ruijie#configure terminal     ------>进入全局配置模式
+Ruijie(config)#vlan 1    ------>ap的vlan
+Ruijie(config-vlan)#exit
+Ruijie(config)#vlan 2------>用户的vlan
+Ruijie(config-vlan)#exit
+2、配置AP 、无线用户网关和loopback 0地址
+Ruijie(config)#interface vlan 1   ------>ap的网关
+Ruijie(config-int-vlan)#ip address  172.16.1.1 255.255.255.0
+Ruijie(config-int-vlan)#exit
+Ruijie(config)#interface vlan 2   ------>用户的SVI接口（必须配置）。
+Ruijie(config-int-vlan)#ip address172.16.2.1 255.255.255.0    
+Ruijie(config-int-vlan)#exit
+Ruijie(config)#interface loopback 0
+Ruijie(config-int-loopback)#ip address 1.1.1.1 255.255.255.0  ------->默认是loopback 0，用于ap需找ac的地址，DHCP中的option138字段
+Ruijie(config-int-loopback)#exit
+
+3、配置无线信号
+Wlan-config配置，创建SSID
+Ruijie(config)#wlan-config 1  Ruijie-test     ------->配置wlan-config，id是1，SSID（无线信号）是Ruijie-test    
+Ruijie(config-wlan)#enable-broad-ssid        ------->允许广播SSID
+Ruijie(config-wlan)#exit
+ap-group配置，关联wlan-config和用户vlan
+Ruijie(config)#ap-group default
+Ruijie(config-ap-group)#interface-mapping 1 2      ------->把wlan-config 1和vlan 2进行关联
+Ruijie(config-ap-group)#exit
+ 注意：默认所有AP都关联到ap-group default组，如果要调用新定义的ap-group，那么需要在相应的ap-config中配置ap-group xx。 第一次部署时每个AP的ap-config名称默认是AP的MAC地址（背面的贴纸mac，非以太网接口mac）。 
+4、配置AC连接AP的接口所属vlan  
+Ruijie(config-int-loopback)#interface GigabitEthernet 0/1      
+Ruijie(config-int-GigabitEthernet 0/1)#switchport access vlan 1       ------->与AP相连的接口，把接口划到AP的vlan中
+Ruijie(config-int-GigabitEthernet 0/1)#exit
+
+
+5、配置AP的DCHP
+Ruijie(config)#service dhcp   ------->开启DHCP服务
+Ruijie(config)#ip dhcp pool ap_ruijie   ------->创建DHCP地址池，名称是ap_ruijie
+Ruijie(config-dhcp)#option 138 ip 1.1.1.1   ------->配置option字段，指定AC的地址，即AC的loopback 0地址
+Ruijie(config-dhcp)#network 172.16.1.0 255.255.255.0   ------->分配给ap的地址
+Ruijie(config-dhcp)#default-route 172.16.1.1   ------->分配给ap的网关地址
+Ruijie(config-dhcp)#exit
+注意：AP的DHCP中的option字段和网段、网关要配置正确，否则会出现AP获取不到DHCP信息导致无法建立隧道
+ 6、配置无线用户的DHCP
+Ruijie(config)#ip dhcp pool user_ruijie   ------->配置DHCP地址池，名称是user_ruijie
+Ruijie(config-dhcp)#network 172.16.2.0 255.255.255.0   ------->分配给无线用户的地址
+Ruijie(config-dhcp)#default-route 172.16.2.1  ------->分给无线用户的网关
+Ruijie(config-dhcp)#dns-server 8.8.8.8  ------->分配给无线用户的dns
+Ruijie(config-dhcp)#exit
+ 7、保存配置
+Ruijie(config)#exit------>退出到特权模式
+Ruijie#write------>确认配置正确，保存配置
